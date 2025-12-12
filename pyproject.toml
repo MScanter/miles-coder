@@ -7,7 +7,9 @@ requires-python = ">=3.13"
 dependencies = [
     "mcp>=1.23.3",
     "openai>=2.9.0",
+    "prompt-toolkit>=3.0.52",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
     "rich>=14.2.0",
+    "tiktoken>=0.12.0",
 ]
