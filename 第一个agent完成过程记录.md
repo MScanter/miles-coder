@@ -1,4 +1,4 @@
-# 第一个 CodingAgent 完成过程记录
+# First CodingAgent Progress Log
 
 ## 已完成
 
@@ -25,3 +25,33 @@
 2. 添加 Bash 执行工具 - 让 Agent 能运行命令
 3. 错误处理优化 - 文件不存在等情况的友好提示
 4. 上下文管理 - Token 计数和滑动窗口
+
+---
+
+# First CodingAgent Progress Log (English)
+
+## Completed
+
+- ✅ Agent core loop - outer loop waits for user input, inner loop handles tool calls
+- ✅ Tool calling and execution - read_file, write_file, list_files
+- ✅ Pretty output - tool calls display icons and parameters
+- ✅ Thinking process display - using DeepSeek reasoner's reasoning_content
+- ✅ Multiple tool calls support - iterate all tool_calls with for loop
+- ✅ Standardized API format - msg_to_dict conversion, compatible with all OpenAI API services
+- ✅ Pydantic parameter definitions - define tool parameter classes with BaseModel
+- ✅ Auto-generate TOOLS_SCHEMA - make_tool function replaces hand-written schema
+- ✅ Startup welcome message - display model name and usage tips
+- ✅ Ctrl+C graceful exit - KeyboardInterrupt exception handling
+- ✅ Rich library integration - Console, Markdown rendering
+- ✅ Streaming output - Live + Spinner + Panel for typewriter effect
+- ✅ Input optimization - prompt_toolkit supports history and normal editing
+- ✅ edit_file tool - partial file content replacement, saves tokens
+
+---
+
+## Next Steps
+
+1. MCP integration - Model Context Protocol standard tool protocol
+2. Add Bash execution tool - let Agent run commands
+3. Error handling optimization - friendly prompts for file not found, etc.
+4. Context management - Token counting and sliding window
