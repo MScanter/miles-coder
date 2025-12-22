@@ -9,7 +9,7 @@ A CLI coding assistant agent built with LangChain.
 - LangChain Agent framework
 - **Smart context management**:
   - Displays remaining context as percentage with visual progress bar
-  - Color-coded warnings (yellow at 80%, red at 95%)
+  - Color-coded warnings (yellow at 20% left, red at 5% left)
   - Configurable context limit (default 200k tokens)
   - `/compact` command to compress history
   - Automatic fallback to model configuration table when API doesn't provide context info
@@ -27,17 +27,18 @@ Once the CLI is running, you can use these commands:
 - `/compact` - Compress conversation history (keeps last 3 turns)
 - `/clear` - Clear all conversation history
 - `/help` - Show help message with all commands
+- `/` - Show all available commands (same as `/help`)
 - `exit` or `quit` - Exit the program
 
 ## Context Usage Indicators
 
-The CLI displays context usage with color-coded warnings:
+The CLI displays remaining context with color-coded warnings:
 
-- **0-79%** - Normal (dim gray)
-- **80-94%** - Warning (yellow ⚠)
-- **95-100%** - Critical (red bold ⚠) - use `/compact` to free up space
+- **100-21%** - Normal (dim gray)
+- **20-6%** - Warning (yellow ⚠)
+- **5-0%** - Critical (red bold ⚠) - use `/compact` to free up space
 
-Example display: `ctx 45% [████░░░░░░]`
+Example display: `ctx left 45% [████░░░░░░]`
 
 ## Requirements
 
@@ -76,7 +77,7 @@ This follows best practices from production CLI tools like Claude Code.
 
 ### Context Length Detection
 
-The context usage indicator (e.g., `ctx 45% [████░░░░░░]`) shows how much of your allowed context is being used. The system attempts to detect the model's context window in the following order:
+The context usage indicator (e.g., `ctx left 45% [████░░░░░░]`) shows how much context remains. The system attempts to detect the model's context window in the following order:
 
 1. **API Detection** (preferred): Queries the provider's `models.retrieve()` or `models.list()` endpoint
 2. **Hardcoded Config** (fallback): Uses the built-in model configuration table in `model_config.py`

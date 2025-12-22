@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage, SystemMessage
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -8,7 +9,6 @@ from rich.live import Live
 from tools import tools
 import os
 import asyncio
-from langgraph.checkpoint.memory import MemorySaver
 import math
 from openai import OpenAI
 from model_config import get_model_context_length
@@ -25,12 +25,14 @@ CWD = os.path.basename(os.getcwd())
 MAX_CONTEXT_LIMIT = int(os.getenv("MAX_CONTEXT_LIMIT", "200000"))  # 默认限制 200k tokens
 CONTEXT_WARNING_THRESHOLD = 0.8  # 使用超过 80% 时警告
 CONTEXT_CRITICAL_THRESHOLD = 0.95  # 使用超过 95% 时严重警告
+SUMMARY_MESSAGE_CHAR_LIMIT = 800
+SUMMARY_CHUNK_TOKEN_LIMIT = 2500
 
 llm = ChatOpenAI(model=MODEL, streaming=True)
+summary_llm = ChatOpenAI(model=MODEL, streaming=False, temperature=0)
 
-memory = MemorySaver()
-agent = create_agent(llm, tools, checkpointer=memory)
-history: list[tuple[str, str]] = []
+agent = create_agent(llm, tools)
+chat_messages: list[object] = []
 
 MODEL_CONTEXT_TOKENS: int | None = None
 MODEL_CONTEXT_SOURCE = "uninitialized"
@@ -172,10 +174,174 @@ def estimate_tokens(text: str) -> int:
         return max(1, math.ceil(ascii_chars / 4) + non_ascii_chars)
 
 
-def estimate_tokens_from_messages(messages: list[tuple[str, str]]) -> int:
+def _stringify_message_content(content: object) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and "text" in item:
+                parts.append(str(item["text"]))
+            else:
+                parts.append(str(item))
+        return " ".join(parts)
+    if isinstance(content, dict):
+        text = content.get("text")
+        if isinstance(text, str):
+            return text
+    return str(content)
+
+
+def _normalize_message(message: object) -> tuple[str, str]:
+    if isinstance(message, tuple) and len(message) == 2:
+        role, content = message
+        return str(role), _stringify_message_content(content)
+    if isinstance(message, dict):
+        role = message.get("role") or message.get("type") or "unknown"
+        content = message.get("content", "")
+        return str(role), _stringify_message_content(content)
+    role = getattr(message, "type", None)
+    if role is not None and hasattr(message, "content"):
+        return str(role), _stringify_message_content(getattr(message, "content"))
+    return "unknown", _stringify_message_content(message)
+
+
+def _is_user_role(role: str) -> bool:
+    return role in ("user", "human")
+
+
+def _is_assistant_role(role: str) -> bool:
+    return role in ("assistant", "ai")
+
+
+def _display_role(role: str) -> str:
+    if role == "human":
+        return "user"
+    if role == "ai":
+        return "assistant"
+    return role
+
+
+def _is_summary_system_message(role: str, content: str) -> bool:
+    return role == "system" and content.startswith("[已压缩")
+
+
+def _get_message_name(message: object) -> str | None:
+    if isinstance(message, dict):
+        name = message.get("name")
+        return name if isinstance(name, str) and name else None
+    name = getattr(message, "name", None)
+    return name if isinstance(name, str) and name else None
+
+
+def _format_message_for_summary(message: object) -> str:
+    role, content = _normalize_message(message)
+    content = content.strip()
+    if not content:
+        return ""
+    if len(content) > SUMMARY_MESSAGE_CHAR_LIMIT:
+        content = content[:SUMMARY_MESSAGE_CHAR_LIMIT] + "..."
+    label = _display_role(role)
+    name = _get_message_name(message)
+    if role == "tool" and name:
+        label = f"tool:{name}"
+    return f"{label}: {content}"
+
+
+def _chunk_lines(lines: list[str], max_tokens: int) -> list[str]:
+    chunks: list[str] = []
+    current_lines: list[str] = []
+    current_tokens = 0
+    for line in lines:
+        line_tokens = estimate_tokens(line)
+        if current_lines and current_tokens + line_tokens > max_tokens:
+            chunks.append("\n".join(current_lines))
+            current_lines = [line]
+            current_tokens = line_tokens
+        else:
+            current_lines.append(line)
+            current_tokens += line_tokens
+    if current_lines:
+        chunks.append("\n".join(current_lines))
+    return chunks
+
+
+def _summarize_text(text: str, system_prompt: str) -> str:
+    if not text.strip():
+        return ""
+    try:
+        response = summary_llm.invoke(
+            [SystemMessage(content=system_prompt), HumanMessage(content=text)]
+        )
+    except Exception:
+        return ""
+    content = getattr(response, "content", "")
+    summary = _stringify_message_content(content).strip()
+    return summary
+
+
+def _generate_structured_summary(messages: list[object]) -> str:
+    lines = []
+    for msg in messages:
+        line = _format_message_for_summary(msg)
+        if line:
+            lines.append(line)
+    if not lines:
+        return ""
+
+    chunk_prompt = (
+        "你是对话总结助手。将下面对话片段提炼为要点，保留事实、决策、约束、"
+        "问题、文件/命令。不要推测。输出不超过 6 条要点，每条一行，以 \"- \" 开头。"
+    )
+    final_prompt = (
+        "你是对话总结助手。根据下方对话内容或要点，生成结构化总结（中文，简洁）。\n"
+        "格式：\n"
+        "【目标/需求】\n"
+        "【结论/已完成】\n"
+        "【关键约束/配置】\n"
+        "【涉及文件/命令】\n"
+        "【待解决/下一步】\n"
+        "如果没有信息写“无”。"
+    )
+
+    chunks = _chunk_lines(lines, SUMMARY_CHUNK_TOKEN_LIMIT)
+    if len(chunks) == 1:
+        return _summarize_text(chunks[0], final_prompt)
+
+    partials: list[str] = []
+    for chunk in chunks:
+        partial = _summarize_text(chunk, chunk_prompt)
+        if partial:
+            partials.append(partial)
+    if not partials:
+        return ""
+
+    combined = "\n".join(partials)
+    return _summarize_text(combined, final_prompt)
+
+
+def _build_fallback_summary(messages: list[object]) -> str:
+    summary_parts = []
+    for msg in messages:
+        role, content = _normalize_message(msg)
+        if not (_is_user_role(role) or _is_assistant_role(role)):
+            continue
+        preview = content[:50].replace("\n", " ")
+        if len(content) > 50:
+            preview += "..."
+        summary_parts.append(f"  - {_display_role(role)}: {preview}")
+    summary = "\n".join(summary_parts[:5])
+    if len(summary_parts) > 5:
+        summary += f"\n  ... 还有 {len(summary_parts) - 5} 条"
+    return summary
+
+
+def estimate_tokens_from_messages(messages: list[object]) -> int:
     if not messages:
         return 0
-    combined = "\n".join(f"{role}: {content}" for role, content in messages)
+    combined = "\n".join(
+        f"{role}: {content}" for role, content in (_normalize_message(m) for m in messages)
+    )
     return estimate_tokens(combined)
 
 
@@ -185,15 +351,19 @@ def prompt_user_input() -> str:
     if model_context_tokens:
         # 使用配置的上下文限制或模型自身的限制（取较小值）
         effective_limit = min(model_context_tokens, MAX_CONTEXT_LIMIT)
-        used_tokens = estimate_tokens_from_messages(history)
+        used_tokens = estimate_tokens_from_messages(chat_messages)
         usage_ratio = used_tokens / effective_limit
-        percentage = int(usage_ratio * 100)
+        usage_ratio = min(max(usage_ratio, 0.0), 1.0)
+        remaining_ratio = max(0.0, 1.0 - usage_ratio)
+        percentage = int(remaining_ratio * 100)
 
-        # 根据使用率设置颜色
-        if usage_ratio >= CONTEXT_CRITICAL_THRESHOLD:
+        # 根据剩余率设置颜色
+        warn_remaining = 1 - CONTEXT_WARNING_THRESHOLD
+        critical_remaining = 1 - CONTEXT_CRITICAL_THRESHOLD
+        if remaining_ratio <= critical_remaining:
             color = "red bold"
             icon = "⚠"
-        elif usage_ratio >= CONTEXT_WARNING_THRESHOLD:
+        elif remaining_ratio <= warn_remaining:
             color = "yellow"
             icon = "⚠"
         else:
@@ -202,10 +372,10 @@ def prompt_user_input() -> str:
 
         # 显示百分比 + 进度条
         bar_width = 10
-        filled = int(bar_width * usage_ratio)
+        filled = int(bar_width * remaining_ratio)
         bar = "█" * filled + "░" * (bar_width - filled)
 
-        ctx_label = f"[{color}]{icon} ctx {percentage}% [{bar}][/{color}]"
+        ctx_label = f"[{color}]{icon} ctx left {percentage}% [{bar}][/{color}]"
     else:
         ctx_label = "[dim]ctx unknown[/dim]"
 
@@ -228,32 +398,37 @@ def compact_history(keep_recent: int = 3) -> None:
     Args:
         keep_recent: 保留最近的对话轮数（默认 3）
     """
-    global history
+    global chat_messages
 
-    if len(history) <= keep_recent:
-        console.print(f"[dim]历史记录只有 {len(history)} 条，无需压缩[/dim]")
+    user_indices = [
+        idx
+        for idx, msg in enumerate(chat_messages)
+        if _is_user_role(_normalize_message(msg)[0])
+    ]
+    if len(user_indices) <= keep_recent:
+        console.print(f"[dim]对话轮次只有 {len(user_indices)} 条，无需压缩[/dim]")
         return
 
-    removed_count = len(history) - keep_recent
-    old_history = history[:removed_count]
+    cut_index = user_indices[-keep_recent]
+    old_messages = chat_messages[:cut_index]
+    kept_messages = chat_messages[cut_index:]
 
-    # 生成汇总信息
-    summary_parts = []
-    for role, content in old_history:
-        preview = content[:50].replace("\n", " ")
-        if len(content) > 50:
-            preview += "..."
-        summary_parts.append(f"  - {role}: {preview}")
+    preserved_system_messages = []
+    for msg in old_messages:
+        role, content = _normalize_message(msg)
+        if role == "system" and not _is_summary_system_message(role, content):
+            preserved_system_messages.append(msg)
 
-    summary = f"[已压缩 {removed_count} 条早期对话]\n" + "\n".join(summary_parts[:5])
-    if len(summary_parts) > 5:
-        summary += f"\n  ... 还有 {len(summary_parts) - 5} 条"
+    summary_body = _generate_structured_summary(old_messages)
+    if not summary_body:
+        summary_body = _build_fallback_summary(old_messages)
 
+    summary = f"[已压缩 {len(old_messages)} 条早期消息]\n{summary_body}".rstrip()
+
+    before_tokens = estimate_tokens_from_messages(chat_messages)
     # 保留最近的对话，并在开头添加汇总
-    history = [("system", summary)] + history[-keep_recent:]
-
-    before_tokens = estimate_tokens_from_messages(old_history + history[-keep_recent:])
-    after_tokens = estimate_tokens_from_messages(history)
+    chat_messages = preserved_system_messages + [("system", summary)] + kept_messages
+    after_tokens = estimate_tokens_from_messages(chat_messages)
     saved_tokens = before_tokens - after_tokens
 
     console.print(
@@ -262,15 +437,32 @@ def compact_history(keep_recent: int = 3) -> None:
     )
 
 
-async def run_agent(user_input: str) -> str:
+def show_help() -> None:
+    help_text = """[bold cyan]可用命令：[/bold cyan]
+
+  [yellow]/compact[/yellow]  - 压缩历史记录（保留最近 3 条对话）
+  [yellow]/clear[/yellow]    - 清空所有历史记录
+  [yellow]/help[/yellow]     - 显示此帮助信息
+  [yellow]/[/yellow]         - 显示所有可用命令
+  [yellow]exit[/yellow] 或 [yellow]quit[/yellow] - 退出程序
+
+[dim]上下文剩余率说明：[/dim]
+  • [dim]100-21%[/dim]  - 正常（灰色）
+  • [yellow]20-6%[/yellow]  - 警告（黄色 ⚠）
+  • [red bold]5-0%[/red bold] - 严重（红色 ⚠），建议执行 /compact
+"""
+    console.print(help_text)
+
+
+async def run_agent(user_input: str, messages: list[object]) -> tuple[str, list[object] | None]:
     content = ""
     last_response = ""
-    config = {"configurable": {"thread_id": "main"}}
+    final_messages: list[object] | None = None
+    input_messages = list(messages) + [("user", user_input)]
 
     with Live(console=console, refresh_per_second=10) as live:
         async for event in agent.astream_events(
-            {"messages": [("user", user_input)]},
-            config=config,
+            {"messages": input_messages},
             version="v2"
         ):
             kind = event["event"]
@@ -287,12 +479,19 @@ async def run_agent(user_input: str) -> str:
             elif kind == "on_tool_start":
                 tool_name = event["name"]
                 live.console.print(f"[dim]🔧 {tool_name}[/dim]")
+            elif kind == "on_chain_end":
+                output = event.get("data", {}).get("output")
+                if isinstance(output, dict):
+                    messages_output = output.get("messages")
+                    if isinstance(messages_output, list):
+                        if final_messages is None or len(messages_output) >= len(final_messages):
+                            final_messages = messages_output
 
     # 输出结束后添加空行
     console.print()
     if content:
         last_response = content
-    return last_response
+    return last_response, final_messages
 
 
 if __name__ == "__main__":
@@ -304,6 +503,10 @@ if __name__ == "__main__":
 
             if not user_input.strip():
                 continue
+
+            cleaned_input = user_input.strip()
+            if cleaned_input in {"/", "／"}:
+                user_input = "/help"
 
             # 处理退出命令
             if user_input.lower() in ["exit", "quit"]:
@@ -318,33 +521,26 @@ if __name__ == "__main__":
             # 处理清空命令
             if user_input.lower() == "/clear":
                 console.print()
-                history.clear()
+                chat_messages.clear()
                 console.print("[green]✓[/green] 已清空所有历史记录")
                 continue
 
             # 处理帮助命令
             if user_input.lower() == "/help":
                 console.print()
-                help_text = """[bold cyan]可用命令：[/bold cyan]
-
-  [yellow]/compact[/yellow]  - 压缩历史记录（保留最近 3 条对话）
-  [yellow]/clear[/yellow]    - 清空所有历史记录
-  [yellow]/help[/yellow]     - 显示此帮助信息
-  [yellow]exit[/yellow] 或 [yellow]quit[/yellow] - 退出程序
-
-[dim]上下文使用率说明：[/dim]
-  • [dim]0-79%[/dim]   - 正常（灰色）
-  • [yellow]80-94%[/yellow]  - 警告（黄色 ⚠）
-  • [red bold]95-100%[/red bold] - 严重（红色 ⚠），建议执行 /compact
-"""
-                console.print(help_text)
+                show_help()
                 continue
 
             console.print()
-            assistant_response = asyncio.run(run_agent(user_input))
-            history.append(("user", user_input))
-            if assistant_response:
-                history.append(("assistant", assistant_response))
+            assistant_response, updated_messages = asyncio.run(
+                run_agent(user_input, chat_messages)
+            )
+            if updated_messages is None:
+                chat_messages.append(("user", user_input))
+                if assistant_response:
+                    chat_messages.append(("assistant", assistant_response))
+            else:
+                chat_messages = updated_messages
 
     except KeyboardInterrupt:
         pass
