@@ -19,12 +19,29 @@
 
 ---
 
+## LangGraph 迁移 ✅
+
+- ✅ LangChain 生态入门 - langchain + langchain-openai + langgraph
+- ✅ 工具迁移 - 用 @tool 装饰器重写现有工具
+- ✅ Agent 重构 - 用 langgraph 的 create_react_agent 替代手写循环
+
+---
+
+## 上下文管理系统 ✅ (2025-12-22)
+
+- ✅ 上下文长度检测 - model_config.py 硬编码配置表 (80+ 模型) + API 备选
+- ✅ 百分比显示 - ctx 45% [████░░░░░░] 替代绝对值显示
+- ✅ 颜色警告 - 80% 黄色，95% 红色提示
+- ✅ 上下文限制 - 默认 200k，可通过 MAX_CONTEXT_LIMIT 配置
+- ✅ 命令系统 - /compact (压缩历史)、/clear (清空)、/help (帮助)
+
+---
+
 ## 下一步
 
-1. 接入 MCP - Model Context Protocol 标准工具协议
-2. 添加 Bash 执行工具 - 让 Agent 能运行命令
-3. 错误处理优化 - 文件不存在等情况的友好提示
-4. 上下文管理 - Token 计数和滑动窗口
+1. 流式输出 - 恢复打字机效果
+2. Memory 集成 - 让 Agent 记住多轮对话
+3. 更多工具 - run_command、search_code 等
 
 ---
 
@@ -49,9 +66,26 @@
 
 ---
 
+## LangGraph Migration ✅
+
+- ✅ LangChain ecosystem - langchain + langchain-openai + langgraph
+- ✅ Tool migration - Rewrite tools with @tool decorator
+- ✅ Agent refactor - Use langgraph's create_react_agent
+
+---
+
+## Context Management System ✅ (2025-12-22)
+
+- ✅ Context length detection - model_config.py hardcoded table (80+ models) + API fallback
+- ✅ Percentage display - ctx 45% [████░░░░░░] instead of absolute values
+- ✅ Color warnings - Yellow at 80%, red at 95%
+- ✅ Context limit - Default 200k, configurable via MAX_CONTEXT_LIMIT
+- ✅ Command system - /compact (compress), /clear (reset), /help (info)
+
+---
+
 ## Next Steps
 
-1. MCP integration - Model Context Protocol standard tool protocol
-2. Add Bash execution tool - let Agent run commands
-3. Error handling optimization - friendly prompts for file not found, etc.
-4. Context management - Token counting and sliding window
+1. Streaming output - Restore typewriter effect
+2. Memory integration - Multi-turn conversation memory
+3. More tools - run_command, search_code, etc.
