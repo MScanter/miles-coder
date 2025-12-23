@@ -5,7 +5,7 @@ description = "AI coding assistant CLI powered by LangChain"
 readme = "README.md"
 requires-python = ">=3.13"
 license = {text = "MIT"}
-authors = [{name = "Miles", email = "miles@example.com"}]
+authors = [{name = "Miles", email = "miles_011@foxmail.com"}]
 keywords = ["ai", "cli", "coding-assistant", "langchain"]
 classifiers = [
     "Development Status :: 3 - Alpha",
