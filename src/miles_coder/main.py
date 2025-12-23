@@ -6,18 +6,19 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.live import Live
-from tools import tools
+from miles_coder.tools import tools
 import os
 import asyncio
 import math
 from openai import OpenAI
-from model_config import get_model_context_length
+from miles_coder.model_config import get_model_context_length
+from miles_coder.config import get_api_config, is_configured, setup_config
 
 load_dotenv()
 
 console = Console()
 
-MODEL = os.getenv("MODEL", "deepseek-chat")
+API_KEY, BASE_URL, MODEL = get_api_config()
 VERSION = "0.2"
 CWD = os.path.basename(os.getcwd())
 
@@ -28,10 +29,30 @@ CONTEXT_CRITICAL_THRESHOLD = 0.95  # 使用超过 95% 时严重警告
 SUMMARY_MESSAGE_CHAR_LIMIT = 800
 SUMMARY_CHUNK_TOKEN_LIMIT = 2500
 
-llm = ChatOpenAI(model=MODEL, streaming=True)
-summary_llm = ChatOpenAI(model=MODEL, streaming=False, temperature=0)
+llm: ChatOpenAI | None = None
+summary_llm: ChatOpenAI | None = None
+agent = None
 
-agent = create_agent(llm, tools)
+
+def init_llm():
+    global llm, summary_llm, agent, API_KEY, BASE_URL, MODEL
+    API_KEY, BASE_URL, MODEL = get_api_config()
+    llm = ChatOpenAI(
+        model=MODEL,
+        streaming=True,
+        api_key=API_KEY,
+        base_url=BASE_URL,
+    )
+    summary_llm = ChatOpenAI(
+        model=MODEL,
+        streaming=False,
+        temperature=0,
+        api_key=API_KEY,
+        base_url=BASE_URL,
+    )
+    agent = create_agent(llm, tools)
+
+
 chat_messages: list[object] = []
 
 MODEL_CONTEXT_TOKENS: int | None = None
@@ -103,15 +124,12 @@ def find_context_length(payload: object, depth: int = 0) -> int | None:
 
 
 def resolve_model_context_tokens() -> tuple[int | None, str]:
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        # API key 不存在时，尝试从配置表获取
+    if not API_KEY:
         tokens = get_model_context_length(MODEL)
         return tokens, "config" if tokens else "unknown"
 
-    base_url = os.getenv("OPENAI_BASE_URL")
     try:
-        client = OpenAI(api_key=api_key, base_url=base_url)
+        client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
     except Exception:
         # 客户端创建失败时，尝试从配置表获取
         tokens = get_model_context_length(MODEL)
@@ -494,7 +512,14 @@ async def run_agent(user_input: str, messages: list[object]) -> tuple[str, list[
     return last_response, final_messages
 
 
-if __name__ == "__main__":
+def main():
+    global chat_messages
+
+    if not is_configured():
+        if not setup_config(console):
+            return
+
+    init_llm()
     show_welcome()
 
     try:
@@ -546,3 +571,7 @@ if __name__ == "__main__":
         pass
 
     console.print("\n[dim]👋 再见！[/dim]")
+
+
+if __name__ == "__main__":
+    main()
