@@ -14,11 +14,19 @@ A CLI coding assistant agent built with LangChain.
   - `/compact` command to compress history
   - Automatic fallback to model configuration table when API doesn't provide context info
 
+## Install
+
+```bash
+pip install git+https://github.com/MScanter/miles-coder.git
+```
+
 ## Run
 
 ```bash
-uv run main.py
+miles-coder
 ```
+
+First run will prompt you to configure API URL and Key.
 
 ## Commands
 
