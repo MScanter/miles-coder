@@ -10,17 +10,36 @@ from miles_coder.tools import tools
 import os
 import asyncio
 import math
+import urllib.request
+import json
 from openai import OpenAI
 from miles_coder.model_config import get_model_context_length
 from miles_coder.config import get_api_config, is_configured, setup_config
+
+GITHUB_REPO = "MScanter/miles-coder"
 
 load_dotenv()
 
 console = Console()
 
 API_KEY, BASE_URL, MODEL = get_api_config()
-VERSION = "0.2"
+VERSION = "0.1.0"
 CWD = os.path.basename(os.getcwd())
+
+
+def check_for_updates() -> str | None:
+    """检查 GitHub 是否有新版本，返回新版本号或 None"""
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        req = urllib.request.Request(url, headers={"User-Agent": "miles-coder"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode())
+            latest = data.get("tag_name", "").lstrip("v")
+            if latest and latest != VERSION:
+                return latest
+    except Exception:
+        pass
+    return None
 
 # 上下文管理配置
 MAX_CONTEXT_LIMIT = int(os.getenv("MAX_CONTEXT_LIMIT", "200000"))  # 默认限制 200k tokens
@@ -514,6 +533,12 @@ async def run_agent(user_input: str, messages: list[object]) -> tuple[str, list[
 
 def main():
     global chat_messages
+
+    # 检查更新
+    new_version = check_for_updates()
+    if new_version:
+        console.print(f"[yellow]⬆ 新版本 v{new_version} 可用！运行以下命令更新：[/yellow]")
+        console.print(f"[dim]  pipx upgrade miles-coder[/dim]\n")
 
     if not is_configured():
         if not setup_config(console):
