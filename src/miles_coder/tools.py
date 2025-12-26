@@ -4,50 +4,50 @@ import os
 
 @tool
 def read_file(path: str) -> str:
-    """读取文件内容"""
+    """Read file content."""
     try:
         with open(path, "r") as f:
             return f.read()
     except FileNotFoundError:
-        return f"错误：文件 {path} 不存在"
+        return f"Error: File {path} not found"
 
 
 @tool
 def write_file(path: str, content: str) -> str:
-    """写入内容到文件"""
+    """Write content to file."""
     with open(path, "w") as f:
         f.write(content)
-    return f"成功写入内容到文件 {path}"
+    return f"Successfully wrote to {path}"
 
 
 @tool
 def list_files(directory: str = ".") -> str:
-    """列出目录中的文件"""
+    """List files in directory."""
     try:
         return "\n".join(os.listdir(directory))
     except FileNotFoundError:
-        return f"错误：目录 {directory} 不存在"
+        return f"Error: Directory {directory} not found"
 
 
 @tool
 def edit_file(path: str, old_content: str, new_content: str) -> str:
-    """替换文件中的部分内容"""
+    """Replace part of file content."""
     try:
         with open(path, "r") as f:
             content = f.read()
         if old_content not in content:
-            return "错误: 未找到要替换的内容"
+            return "Error: Content to replace not found"
         content = content.replace(old_content, new_content, 1)
         with open(path, "w") as f:
             f.write(content)
-        return f"已更新 {path}"
+        return f"Updated {path}"
     except FileNotFoundError:
-        return f"错误：文件 {path} 不存在"
+        return f"Error: File {path} not found"
 
 
 @tool
 def search_code(pattern: str, directory: str = ".") -> str:
-    """在代码中搜索关键词，返回匹配的文件和行"""
+    """Search for keyword in code, return matching files and lines."""
     import subprocess
     result = subprocess.run(
         ["grep", "-rn", "--include=*.py", pattern, directory],
@@ -56,16 +56,16 @@ def search_code(pattern: str, directory: str = ".") -> str:
     )
     if result.stdout:
         return result.stdout[:2000]
-    return "未找到匹配"
+    return "No matches found"
 
 
 @tool
 def get_project_overview(directory: str = ".") -> str:
-    """获取项目概览：文件结构 + README + 入口文件，帮助理解整个项目"""
+    """Get project overview: file structure + README + entry file."""
     result = []
 
-    # 1. 文件结构（只显示前3层，跳过无关目录）
-    result.append("## 项目结构\n```")
+    # 1. File structure (show first 3 levels, skip irrelevant dirs)
+    result.append("## Project Structure\n```")
     skip_dirs = {'.git', '.venv', '__pycache__', 'node_modules', '.idea', 'venv'}
     for root, dirs, files in os.walk(directory):
         dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith('.')]
@@ -89,13 +89,13 @@ def get_project_overview(directory: str = ".") -> str:
             result.append(f"\n## README\n{content}")
             break
 
-    # 3. 入口文件
+    # 3. Entry file
     for entry in ['main.py', 'app.py', 'index.py', 'index.js', 'index.ts']:
         path = os.path.join(directory, entry)
         if os.path.exists(path):
             with open(path, 'r') as f:
                 content = f.read()[:1500]
-            result.append(f"\n## 入口文件 ({entry})\n```python\n{content}\n```")
+            result.append(f"\n## Entry File ({entry})\n```python\n{content}\n```")
             break
 
     return '\n'.join(result)

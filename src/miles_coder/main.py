@@ -28,7 +28,7 @@ CWD = os.path.basename(os.getcwd())
 
 
 def check_for_updates() -> str | None:
-    """检查 GitHub 是否有新版本，返回新版本号或 None"""
+    """Check GitHub for new version, return new version or None."""
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(url, headers={"User-Agent": "miles-coder"})
@@ -41,10 +41,10 @@ def check_for_updates() -> str | None:
         pass
     return None
 
-# 上下文管理配置
-MAX_CONTEXT_LIMIT = int(os.getenv("MAX_CONTEXT_LIMIT", "200000"))  # 默认限制 200k tokens
-CONTEXT_WARNING_THRESHOLD = 0.8  # 使用超过 80% 时警告
-CONTEXT_CRITICAL_THRESHOLD = 0.95  # 使用超过 95% 时严重警告
+# Context management config
+MAX_CONTEXT_LIMIT = int(os.getenv("MAX_CONTEXT_LIMIT", "200000"))  # Default 200k tokens
+CONTEXT_WARNING_THRESHOLD = 0.8  # Warn when usage exceeds 80%
+CONTEXT_CRITICAL_THRESHOLD = 0.95  # Critical warning when usage exceeds 95%
 SUMMARY_MESSAGE_CHAR_LIMIT = 800
 SUMMARY_CHUNK_TOKEN_LIMIT = 2500
 
@@ -91,7 +91,7 @@ def show_welcome():
 [bold cyan]{LOGO}[/bold cyan]
 
   [dim]{MODEL} · [cyan]~/{CWD}[/cyan][/dim]
-  [dim]输入 [bold yellow]/help[/bold yellow] 查看命令 · [bold yellow]exit[/bold yellow] 退出[/dim]"""
+  [dim]Type [bold yellow]/help[/bold yellow] for commands · [bold yellow]exit[/bold yellow] to quit[/dim]"""
 
     panel = Panel(
         content,
@@ -150,7 +150,7 @@ def resolve_model_context_tokens() -> tuple[int | None, str]:
     try:
         client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
     except Exception:
-        # 客户端创建失败时，尝试从配置表获取
+        # Client creation failed, try config table
         tokens = get_model_context_length(MODEL)
         return tokens, "config" if tokens else "unknown"
 
@@ -177,7 +177,7 @@ def resolve_model_context_tokens() -> tuple[int | None, str]:
         except Exception:
             tokens = None
 
-    # 如果 API 无法获取上下文长度，使用配置表作为备选方案
+    # If API can't get context length, use config table as fallback
     if not tokens:
         tokens = get_model_context_length(MODEL)
         return tokens, "config" if tokens else "unknown"
@@ -260,7 +260,7 @@ def _display_role(role: str) -> str:
 
 
 def _is_summary_system_message(role: str, content: str) -> bool:
-    return role == "system" and content.startswith("[已压缩")
+    return role == "system" and content.startswith("[Compressed")
 
 
 def _get_message_name(message: object) -> str | None:
@@ -327,18 +327,19 @@ def _generate_structured_summary(messages: list[object]) -> str:
         return ""
 
     chunk_prompt = (
-        "你是对话总结助手。将下面对话片段提炼为要点，保留事实、决策、约束、"
-        "问题、文件/命令。不要推测。输出不超过 6 条要点，每条一行，以 \"- \" 开头。"
+        "You are a conversation summarizer. Extract key points from the conversation below. "
+        "Keep facts, decisions, constraints, questions, files/commands. Don't speculate. "
+        "Output up to 6 bullet points, each starting with \"- \"."
     )
     final_prompt = (
-        "你是对话总结助手。根据下方对话内容或要点，生成结构化总结（中文，简洁）。\n"
-        "格式：\n"
-        "【目标/需求】\n"
-        "【结论/已完成】\n"
-        "【关键约束/配置】\n"
-        "【涉及文件/命令】\n"
-        "【待解决/下一步】\n"
-        "如果没有信息写“无”。"
+        "You are a conversation summarizer. Generate a structured summary based on the content below.\n"
+        "Format:\n"
+        "[Goals/Requirements]\n"
+        "[Conclusions/Completed]\n"
+        "[Key Constraints/Config]\n"
+        "[Files/Commands]\n"
+        "[Pending/Next Steps]\n"
+        "Write \"None\" if no info available."
     )
 
     chunks = _chunk_lines(lines, SUMMARY_CHUNK_TOKEN_LIMIT)
@@ -369,7 +370,7 @@ def _build_fallback_summary(messages: list[object]) -> str:
         summary_parts.append(f"  - {_display_role(role)}: {preview}")
     summary = "\n".join(summary_parts[:5])
     if len(summary_parts) > 5:
-        summary += f"\n  ... 还有 {len(summary_parts) - 5} 条"
+        summary += f"\n  ... and {len(summary_parts) - 5} more"
     return summary
 
 
@@ -386,7 +387,7 @@ def prompt_user_input() -> str:
     model_context_tokens = get_model_context_tokens()
 
     if model_context_tokens:
-        # 使用配置的上下文限制或模型自身的限制（取较小值）
+        # Use configured limit or model's limit (whichever is smaller)
         effective_limit = min(model_context_tokens, MAX_CONTEXT_LIMIT)
         used_tokens = estimate_tokens_from_messages(chat_messages)
         usage_ratio = used_tokens / effective_limit
@@ -394,7 +395,7 @@ def prompt_user_input() -> str:
         remaining_ratio = max(0.0, 1.0 - usage_ratio)
         percentage = int(remaining_ratio * 100)
 
-        # 根据剩余率设置颜色
+        # Set color based on remaining ratio
         warn_remaining = 1 - CONTEXT_WARNING_THRESHOLD
         critical_remaining = 1 - CONTEXT_CRITICAL_THRESHOLD
         if remaining_ratio <= critical_remaining:
@@ -407,7 +408,7 @@ def prompt_user_input() -> str:
             color = "dim"
             icon = ""
 
-        # 显示百分比 + 进度条
+        # Show percentage + progress bar
         bar_width = 10
         filled = int(bar_width * remaining_ratio)
         bar = "█" * filled + "░" * (bar_width - filled)
@@ -418,22 +419,22 @@ def prompt_user_input() -> str:
 
     line = "─" * console.width
     console.print()
-    console.print(line, style="dim orange1")  # 上线
-    console.print()  # 输入行占位
-    console.print(line, style="dim orange1")  # 下线
-    console.print(ctx_label)  # 输入框外左下角
-    print("\033[3A", end="", flush=True)  # 光标上移到输入行
+    console.print(line, style="dim orange1")
+    console.print()
+    console.print(line, style="dim orange1")
+    console.print(ctx_label)
+    print("\033[3A", end="", flush=True)  # Move cursor up to input line
     user_input = console.input("[green]› [/green]")
-    print("\033[2B", end="", flush=True)  # 光标下移到状态行之后
+    print("\033[2B", end="", flush=True)  # Move cursor down after status line
     return user_input
 
 
 def compact_history(keep_recent: int = 3) -> None:
     """
-    压缩历史记录，只保留最近的 N 条对话
+    Compress history, keeping only the most recent N conversations.
 
     Args:
-        keep_recent: 保留最近的对话轮数（默认 3）
+        keep_recent: Number of recent conversation turns to keep (default 3)
     """
     global chat_messages
 
@@ -443,7 +444,7 @@ def compact_history(keep_recent: int = 3) -> None:
         if _is_user_role(_normalize_message(msg)[0])
     ]
     if len(user_indices) <= keep_recent:
-        console.print(f"[dim]对话轮次只有 {len(user_indices)} 条，无需压缩[/dim]")
+        console.print(f"[dim]Only {len(user_indices)} conversation turns, no need to compress[/dim]")
         return
 
     cut_index = user_indices[-keep_recent]
@@ -460,33 +461,33 @@ def compact_history(keep_recent: int = 3) -> None:
     if not summary_body:
         summary_body = _build_fallback_summary(old_messages)
 
-    summary = f"[已压缩 {len(old_messages)} 条早期消息]\n{summary_body}".rstrip()
+    summary = f"[Compressed {len(old_messages)} earlier messages]\n{summary_body}".rstrip()
 
     before_tokens = estimate_tokens_from_messages(chat_messages)
-    # 保留最近的对话，并在开头添加汇总
+    # Keep recent conversations and add summary at the beginning
     chat_messages = preserved_system_messages + [("system", summary)] + kept_messages
     after_tokens = estimate_tokens_from_messages(chat_messages)
     saved_tokens = before_tokens - after_tokens
 
     console.print(
-        f"[green]✓[/green] 已压缩历史记录：保留最近 {keep_recent} 条对话，"
-        f"节省约 {format_tokens(saved_tokens)} tokens"
+        f"[green]✓[/green] History compressed: kept last {keep_recent} conversations, "
+        f"saved ~{format_tokens(saved_tokens)} tokens"
     )
 
 
 def show_help() -> None:
-    help_text = """[bold cyan]可用命令：[/bold cyan]
+    help_text = """[bold cyan]Available commands:[/bold cyan]
 
-  [yellow]/compact[/yellow]  - 压缩历史记录（保留最近 3 条对话）
-  [yellow]/clear[/yellow]    - 清空所有历史记录
-  [yellow]/help[/yellow]     - 显示此帮助信息
-  [yellow]/[/yellow]         - 显示所有可用命令
-  [yellow]exit[/yellow] 或 [yellow]quit[/yellow] - 退出程序
+  [yellow]/compact[/yellow]  - Compress history (keep last 3 conversations)
+  [yellow]/clear[/yellow]    - Clear all history
+  [yellow]/help[/yellow]     - Show this help message
+  [yellow]/[/yellow]         - Show all available commands
+  [yellow]exit[/yellow] or [yellow]quit[/yellow] - Exit program
 
-[dim]上下文剩余率说明：[/dim]
-  • [dim]100-21%[/dim]  - 正常（灰色）
-  • [yellow]20-6%[/yellow]  - 警告（黄色 ⚠）
-  • [red bold]5-0%[/red bold] - 严重（红色 ⚠），建议执行 /compact
+[dim]Context remaining indicator:[/dim]
+  • [dim]100-21%[/dim]  - Normal (gray)
+  • [yellow]20-6%[/yellow]  - Warning (yellow ⚠)
+  • [red bold]5-0%[/red bold] - Critical (red ⚠), run /compact
 """
     console.print(help_text)
 
@@ -524,7 +525,7 @@ async def run_agent(user_input: str, messages: list[object]) -> tuple[str, list[
                         if final_messages is None or len(messages_output) >= len(final_messages):
                             final_messages = messages_output
 
-    # 输出结束后添加空行
+    # Add empty line after output
     console.print()
     if content:
         last_response = content
@@ -534,10 +535,10 @@ async def run_agent(user_input: str, messages: list[object]) -> tuple[str, list[
 def main():
     global chat_messages
 
-    # 检查更新
+    # Check for updates
     new_version = check_for_updates()
     if new_version:
-        console.print(f"[yellow]⬆ 新版本 v{new_version} 可用！运行以下命令更新：[/yellow]")
+        console.print(f"[yellow]⬆ New version v{new_version} available! Run to update:[/yellow]")
         console.print(f"[dim]  pipx upgrade miles-coder[/dim]\n")
 
     if not is_configured():
@@ -558,24 +559,24 @@ def main():
             if cleaned_input in {"/", "／"}:
                 user_input = "/help"
 
-            # 处理退出命令
+            # Handle exit command
             if user_input.lower() in ["exit", "quit"]:
                 break
 
-            # 处理压缩命令
+            # Handle compact command
             if user_input.lower() == "/compact":
                 console.print()
                 compact_history(keep_recent=3)
                 continue
 
-            # 处理清空命令
+            # Handle clear command
             if user_input.lower() == "/clear":
                 console.print()
                 chat_messages.clear()
-                console.print("[green]✓[/green] 已清空所有历史记录")
+                console.print("[green]✓[/green] All history cleared")
                 continue
 
-            # 处理帮助命令
+            # Handle help command
             if user_input.lower() == "/help":
                 console.print()
                 show_help()
@@ -595,7 +596,7 @@ def main():
     except KeyboardInterrupt:
         pass
 
-    console.print("\n[dim]👋 再见！[/dim]")
+    console.print("\n[dim]👋 Goodbye![/dim]")
 
 
 if __name__ == "__main__":

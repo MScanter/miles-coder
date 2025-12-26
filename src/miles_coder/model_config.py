@@ -1,17 +1,17 @@
 """
-模型配置表 - 维护各大 LLM 提供商的模型上下文长度
+Model configuration table - maintains context lengths for major LLM providers.
 
-由于大多数 API 提供商不在 models.retrieve() 或 models.list() 中返回上下文长度，
-我们需要手动维护这个配置表。
+Since most API providers don't return context length in models.retrieve() or models.list(),
+we need to maintain this configuration table manually.
 
-数据来源：
+Data sources:
 - OpenAI: https://platform.openai.com/docs/models
 - Anthropic: https://docs.anthropic.com/en/docs/about-claude/models/overview
 - DeepSeek: https://api-docs.deepseek.com/
 - Google Gemini: https://ai.google.dev/gemini-api/docs/models
-- 其他：各提供商官方文档
+- Others: Official documentation from each provider
 
-最后更新：2025-12-22
+Last updated: 2025-12-22
 """
 
 MODEL_CONTEXT_LENGTHS = {
@@ -31,15 +31,15 @@ MODEL_CONTEXT_LENGTHS = {
     "gpt-4.1-mini": 1_000_000,
     "gpt-4.1-nano": 1_000_000,
     "gpt-5": 400_000,
-    "gpt-5.2-xhigh": 400_000,  # Codex 提供的模型
+    "gpt-5.2-xhigh": 400_000,  # Model from Codex
 
     # Anthropic Claude Models
     "claude-3-opus": 200_000,
     "claude-3-sonnet": 200_000,
     "claude-3-haiku": 200_000,
     "claude-3-5-sonnet": 200_000,
-    "claude-sonnet-4": 200_000,  # 默认，可扩展至 1M
-    "claude-sonnet-4.5": 200_000,  # 默认，可扩展至 1M
+    "claude-sonnet-4": 200_000,  # Default, expandable to 1M
+    "claude-sonnet-4.5": 200_000,  # Default, expandable to 1M
     "claude-opus-4": 200_000,
     "claude-opus-4.5": 200_000,
 
@@ -58,7 +58,7 @@ MODEL_CONTEXT_LENGTHS = {
     "gemini-1.5-flash": 1_000_000,
     "gemini-1.5-flash-8b": 1_000_000,
     "gemini-2.0-flash-exp": 1_000_000,
-    "gemini-3-flash-preview": 1_000_000,  # 假设与 2.0-flash 类似
+    "gemini-3-flash-preview": 1_000_000,  # Assumed similar to 2.0-flash
     "gemini-pro": 32_768,
     "gemini-pro-vision": 16_384,
 
@@ -89,7 +89,7 @@ MODEL_CONTEXT_LENGTHS = {
     "qwen2.5-72b": 128_000,
     "qwen2.5-coder": 128_000,
 
-    # 其他常见模型
+    # Other common models
     "yi-large": 32_000,
     "yi-medium": 16_000,
     "moonshot-v1": 128_000,
@@ -100,25 +100,25 @@ MODEL_CONTEXT_LENGTHS = {
 
 def get_model_context_length(model_name: str) -> int | None:
     """
-    根据模型名称获取上下文长度
+    Get context length by model name.
 
     Args:
-        model_name: 模型名称
+        model_name: Model name
 
     Returns:
-        上下文长度（tokens），如果未找到则返回 None
+        Context length (tokens), or None if not found
     """
-    # 精确匹配
+    # Exact match
     if model_name in MODEL_CONTEXT_LENGTHS:
         return MODEL_CONTEXT_LENGTHS[model_name]
 
-    # 模糊匹配（处理带日期的模型版本，如 "gpt-4o-2024-05-13"）
-    model_base = model_name.split("-")[0:3]  # 取前3个部分
+    # Fuzzy match (handle dated model versions like "gpt-4o-2024-05-13")
+    model_base = model_name.split("-")[0:3]  # Take first 3 parts
     for key in MODEL_CONTEXT_LENGTHS:
         if key.startswith("-".join(model_base)):
             return MODEL_CONTEXT_LENGTHS[key]
 
-    # 部分匹配（用于处理自定义部署的模型名）
+    # Partial match (for custom deployed model names)
     model_lower = model_name.lower()
     for key, value in MODEL_CONTEXT_LENGTHS.items():
         if key.lower() in model_lower or model_lower in key.lower():
@@ -128,19 +128,19 @@ def get_model_context_length(model_name: str) -> int | None:
 
 
 def list_supported_models() -> list[str]:
-    """返回所有支持的模型列表"""
+    """Return list of all supported models."""
     return sorted(MODEL_CONTEXT_LENGTHS.keys())
 
 
 def get_provider_models(provider: str) -> dict[str, int]:
     """
-    根据提供商筛选模型
+    Filter models by provider.
 
     Args:
-        provider: 提供商名称 (openai, anthropic, deepseek, gemini, llama, mistral, qwen)
+        provider: Provider name (openai, anthropic, deepseek, gemini, llama, mistral, qwen)
 
     Returns:
-        该提供商的模型字典
+        Dictionary of models for that provider
     """
     provider_prefixes = {
         "openai": ["gpt-", "o1", "o3", "o4"],

@@ -21,7 +21,7 @@ def save_config(config: dict) -> None:
 
 
 def get_api_config() -> tuple[str | None, str | None, str | None]:
-    """返回 (api_key, base_url, model)"""
+    """Return (api_key, base_url, model)."""
     config = load_config()
     return (
         config.get("api_key") or os.getenv("OPENAI_API_KEY"),
@@ -36,18 +36,18 @@ def is_configured() -> bool:
 
 
 def setup_config(console) -> bool:
-    """首次配置向导，返回是否成功"""
-    console.print("\n[bold cyan]首次配置[/bold cyan]\n")
-    console.print("[dim]支持 OpenAI 兼容格式的 API（OpenAI、DeepSeek、OpenRouter 等）[/dim]\n")
+    """First-run configuration wizard, return success status."""
+    console.print("\n[bold cyan]First-time Setup[/bold cyan]\n")
+    console.print("[dim]Supports OpenAI-compatible APIs (OpenAI, DeepSeek, OpenRouter, etc.)[/dim]\n")
 
-    base_url = console.input("[yellow]API Base URL[/yellow] (留空使用 OpenAI 默认): ").strip()
+    base_url = console.input("[yellow]API Base URL[/yellow] (leave empty for OpenAI default): ").strip()
     api_key = console.input("[yellow]API Key[/yellow]: ").strip()
 
     if not api_key:
-        console.print("[red]API Key 不能为空[/red]")
+        console.print("[red]API Key cannot be empty[/red]")
         return False
 
-    model = console.input("[yellow]模型名称[/yellow] (默认 deepseek-chat): ").strip()
+    model = console.input("[yellow]Model name[/yellow] (default deepseek-chat): ").strip()
     if not model:
         model = "deepseek-chat"
 
@@ -56,5 +56,5 @@ def setup_config(console) -> bool:
         config["base_url"] = base_url
 
     save_config(config)
-    console.print("\n[green]✓[/green] 配置已保存到 ~/.config/miles-coder/config.json\n")
+    console.print("\n[green]✓[/green] Config saved to ~/.config/miles-coder/config.json\n")
     return True
